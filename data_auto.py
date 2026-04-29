@@ -5,7 +5,7 @@ import numpy as np
 def get_auto_data():
     result = {}
     
-    # WDO - USD/BRL (ticker sempre disponível)
+    # WDO
     try:
         wdo = yf.download('USDBRL=X', period='2d', progress=False)
         if not wdo.empty:
@@ -21,7 +21,7 @@ def get_auto_data():
             }
         else:
             result['WDO'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
-    except Exception as e:
+    except:
         result['WDO'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
     
     # DXY
@@ -35,4 +35,32 @@ def get_auto_data():
                 'symbol': 'DX=F',
                 'price': float(latest['Close']),
                 'open': float(latest['Open']),
-                'change_abs': float(latest['Close']
+                'change_abs': float(latest['Close'] - prev['Close']),
+                'change_pct': float((latest['Close'] - prev['Close']) / prev['Close'] * 100)
+            }
+        else:
+            result['DXY'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
+    except:
+        result['DXY'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
+    
+    # 6L (GBP/USD como proxy)
+    try:
+        sixl = yf.download('GBPUSD=X', period='2d', progress=False)
+        if not sixl.empty:
+            latest = sixl.iloc[-1]
+            prev = sixl.iloc[-2] if len(sixl) > 1 else latest
+            result['6L'] = {
+                'status': 'OK',
+                'symbol': 'GBPUSD=X',
+                'price': float(latest['Close']),
+                'open': float(latest['Open']),
+                'change_abs': float(latest['Close'] - prev['Close']),
+                'change_pct': float((latest['Close'] - prev['Close']) / prev['Close'] * 100)
+            }
+        else:
+            result['6L'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
+    except:
+        result['6L'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
+    
+    return result
+    
