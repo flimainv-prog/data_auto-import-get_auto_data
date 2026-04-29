@@ -1,19 +1,25 @@
 FROM python:3.11-slim
 
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copia os arquivos do projeto
-COPY . .
+# Copia e instala requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Instala dependências com versões específicas
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-    streamlit==1.38.0 \
-    pandas==2.2.2 \
-    numpy==1.26.4 \
-    yfinance==0.2.40
+# Copia o código
+COPY . .
 
 EXPOSE 8501
 
-# Usa forma shell do CMD para expansão correta de ${PORT:-8501}
-CMD streamlit run app.py --server.port ${PORT:-8501} --server.address 0.0.0.0
+# Healthcheck para Render
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8501}/ || exit 1
+
+# Inicia Streamlit com porta dinâmica
+CMD sh -c "streamlit run app.py --server.port ${PORT:-8501} --server.address 0.0.0.0 --server.headless true"
