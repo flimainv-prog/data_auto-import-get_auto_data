@@ -1,65 +1,63 @@
 import streamlit as st
-import pandas as pd
 
+# 1. OBRIGATÓRIO: Primeiro comando do Streamlit
 st.set_page_config(
-    page_title="Dashboard Automático",
-    page_icon="📈",
-    layout="wide"
+    page_title="Dashboard WDO/DXY/6L",
+    layout="wide",
+    page_icon="📈"
 )
 
+import pandas as pd
+import numpy as np
 from data_auto import get_auto_data
 
+# 2. Cache de 30 segundos para não sobrecarregar o Yahoo
 @st.cache_data(ttl=30)
-def load_data():
+def load_market_data():
     return get_auto_data()
 
-st.title("📊 Dashboard Automático - WDO, DXY e 6L")
+st.title("📊 Monitor de Mercado em Tempo Real")
 
-if st.button("🔄 Atualizar Dados Manualmente", use_container_width=True):
+# Botão de atualização manual
+if st.button("🔄 Forçar Atualização"):
     st.cache_data.clear()
     st.rerun()
 
-data = load_data()
+# 3. Carregamento dos dados
+with st.spinner("Buscando dados no Yahoo Finance..."):
+    data = load_market_data()
 
+# 4. Exibição em Colunas (Cards)
 col1, col2, col3 = st.columns(3)
 
-def display_card(asset, asset_data):
-    price = asset_data['price']
-    change_pct = asset_data['change_pct']
-    price_str = f"{price:.4f}" if not pd.isna(price) else "N/A"
-    delta_str = f"{change_pct:.2f}%" if not pd.isna(change_pct) else "N/A"
-    st.metric(
-        label=f"{asset.upper()}",
-        value=price_str,
-        delta=delta_str
-    )
-    if asset_data['status'] != 'success':
-        st.warning("❌ Dados não disponíveis no momento. Tente atualizar.")
-    if 'dataframe' in asset_data:
-        with st.expander(f"📉 Últimos 5 candles de {asset.upper()}"):
-            st.dataframe(asset_data['dataframe'], use_container_width=True)
+for i, asset in enumerate(['WDO', 'DXY', '6L']):
+    info = data[asset]
+    with [col1, col2, col3][i]:
+        if info['status'] == 'success':
+            st.metric(
+                label=f"{asset} ({info['symbol']})",
+                value=f"{info['price']:.4f}",
+                delta=f"{info['change_pct']:.2f}%"
+            )
+        else:
+            st.metric(label=asset, value="Indisponível", delta=None)
+            st.error(f"Erro ao carregar {asset}")
 
-with col1:
-    display_card("WDO", data['WDO'])
-with col2:
-    display_card("DXY", data['DXY'])
-with col3:
-    display_card("6L", data['6L'])
+st.divider()
 
-st.markdown("---")
+# 5. Tabela Consolidada (Garante que a tela não fique vazia)
+st.subheader("📋 Resumo Técnico")
+df_rows = []
+for asset, info in data.items():
+    df_rows.append({
+        "Ativo": asset,
+        "Ticker": info['symbol'],
+        "Preço": info['price'],
+        "Variação %": info['change_pct'],
+        "Status": "✅ OK" if info['status'] == 'success' else "❌ FALHA"
+    })
 
-st.subheader("📋 Tabela Consolidada")
+df = pd.DataFrame(df_rows)
+st.dataframe(df, use_container_width=True, hide_index=True)
 
-cons_data = []
-for asset in ['WDO', 'DXY', '6L']:
-    d = data[asset].copy()
-    d['Ativo'] = asset.upper()
-    if 'dataframe' in d:
-        del d['dataframe']
-    cons_data.append(d)
-
-df_cons = pd.DataFrame(cons_data)
-cols_order = ['Ativo', 'symbol_used', 'status', 'price', 'open', 'previous_close', 'change_abs', 'change_pct', 'source']
-df_cons = df_cons[[c for c in cols_order if c in df_cons.columns]]
-
-st.dataframe(df_cons, use_container_width=True, hide_index=True)
+st.caption("Fonte: Yahoo Finance | Atualização: Automática (30s)")
