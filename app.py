@@ -1,6 +1,6 @@
 import streamlit as st
 
-# 1. OBRIGATÓRIO: Primeiro comando do Streamlit
+# CONFIGURAÇÃO DEVE SER O PRIMEIRO COMANDO
 st.set_page_config(
     page_title="Dashboard WDO/DXY/6L",
     layout="wide",
@@ -8,26 +8,24 @@ st.set_page_config(
 )
 
 import pandas as pd
-import numpy as np
 from data_auto import get_auto_data
 
-# 2. Cache de 30 segundos para não sobrecarregar o Yahoo
+# Cache de 30 segundos para evitar bloqueios do Yahoo
 @st.cache_data(ttl=30)
 def load_market_data():
     return get_auto_data()
 
-st.title("📊 Monitor de Mercado em Tempo Real")
+st.title("📊 Monitor de Mercado - WDO, DXY e 6L")
 
-# Botão de atualização manual
+# Botão para limpar o cache e atualizar
 if st.button("🔄 Forçar Atualização"):
     st.cache_data.clear()
     st.rerun()
 
-# 3. Carregamento dos dados
-with st.spinner("Buscando dados no Yahoo Finance..."):
+with st.spinner("Buscando cotações atualizadas..."):
     data = load_market_data()
 
-# 4. Exibição em Colunas (Cards)
+# Exibição em Cards
 col1, col2, col3 = st.columns(3)
 
 for i, asset in enumerate(['WDO', 'DXY', '6L']):
@@ -35,29 +33,29 @@ for i, asset in enumerate(['WDO', 'DXY', '6L']):
     with [col1, col2, col3][i]:
         if info['status'] == 'success':
             st.metric(
-                label=f"{asset} ({info['symbol']})",
+                label=f"{asset} ({info['symbol_used']})",
                 value=f"{info['price']:.4f}",
                 delta=f"{info['change_pct']:.2f}%"
             )
+            st.caption(f"Abertura: {info['open']:.4f}")
         else:
             st.metric(label=asset, value="Indisponível", delta=None)
             st.error(f"Erro ao carregar {asset}")
 
 st.divider()
 
-# 5. Tabela Consolidada (Garante que a tela não fique vazia)
-st.subheader("📋 Resumo Técnico")
+# Tabela de Resumo para garantir que a tela nunca fique vazia
+st.subheader("📋 Detalhes Técnicos")
 df_rows = []
 for asset, info in data.items():
     df_rows.append({
         "Ativo": asset,
-        "Ticker": info['symbol'],
+        "Ticker": info['symbol_used'],
         "Preço": info['price'],
-        "Variação %": info['change_pct'],
-        "Status": "✅ OK" if info['status'] == 'success' else "❌ FALHA"
+        "Variação %": f"{info['change_pct']:.2f}%" if info['status'] == 'success' else "N/A",
+        "Status": "✅ Ativo" if info['status'] == 'success' else "❌ Falha"
     })
 
-df = pd.DataFrame(df_rows)
-st.dataframe(df, use_container_width=True, hide_index=True)
+st.table(pd.DataFrame(df_rows))
 
-st.caption("Fonte: Yahoo Finance | Atualização: Automática (30s)")
+st.caption("Dados processados via yfinance. Atualização automática a cada 30s.")
