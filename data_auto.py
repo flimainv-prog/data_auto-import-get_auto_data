@@ -1,77 +1,103 @@
 import yfinance as yf
-import pandas as pd
-import numpy as np
 
-
-def fetch_symbol(tickers):
-    for symbol in tickers:
+def _get_asset_data(symbols):
+    for sym in symbols:
+        # Try history
         try:
-            ticker_obj = yf.Ticker(symbol)
-            hist = ticker_obj.history(period='2d', interval='1d')
-            if not hist.empty and len(hist) >= 1:
-                price = hist['Close'].iloc[-1]
-                open_price = hist['Open'].iloc[-1]
-                prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else np.nan
-                change_abs = price - prev_close if not np.isnan(prev_close) else np.nan
-                change_pct = (change_abs / prev_close * 100) if not np.isnan(prev_close) else np.nan
-                source = 'history'
-                df = hist.tail(5)
+            ticker = yf.Ticker(sym)
+            hist = ticker.history(period='2d')
+            if not hist.empty:
+                price = float(hist['Close'].iloc[-1])
+                open_price = float(hist['Open'].iloc[-1])
+                if len(hist) > 1:
+                    prev_close = float(hist['Close'].iloc[-2])
+                else:
+                    prev_close = float('nan')
+                change_abs = price - prev_close
+                change_pct = (change_abs / prev_close * 100) if prev_close == prev_close else float('nan')
                 return {
-                    'symbol_used': symbol,
-                    'status': 'OK',
-                    'price': float(price),
-                    'open': float(open_price),
-                    'previous_close': float(prev_close) if not np.isnan(prev_close) else np.nan,
-                    'change_abs': float(change_abs) if not np.isnan(change_abs) else np.nan,
-                    'change_pct': float(change_pct) if not np.isnan(change_pct) else np.nan,
-                    'source': source,
-                    'dataframe': df
-                }
-            # Fallback to info
-            info = ticker_obj.info
-            price = info.get('regularMarketPrice') or info.get('currentPrice')
-            if price:
-                open_price = info.get('regularMarketOpen', np.nan)
-                prev_close = info.get('regularMarketPreviousClose', np.nan)
-                change_abs = info.get('regularMarketChange', np.nan)
-                change_pct = info.get('regularMarketChangePercent', np.nan)
-                source = 'info'
-                return {
-                    'symbol_used': symbol,
-                    'status': 'OK',
-                    'price': float(price),
-                    'open': float(open_price) if not np.isnan(open_price) else np.nan,
-                    'previous_close': float(prev_close) if not np.isnan(prev_close) else np.nan,
-                    'change_abs': float(change_abs) if not np.isnan(change_abs) else np.nan,
-                    'change_pct': float(change_pct) if not np.isnan(change_pct) else np.nan,
-                    'source': source,
-                    'dataframe': None
+                    'symbol_used': sym,
+                    'status': 'success',
+                    'price': price,
+                    'open': open_price,
+                    'previous_close': prev_close,
+                    'change_abs': change_abs,
+                    'change_pct': change_pct,
+                    'source': 'history'
                 }
         except Exception:
-            continue
-    # Fallback if all fail
-    return {
-        'symbol_used': 'Nenhum',
-        'status': 'Dados indisponíveis no momento. Tente novamente mais tarde.',
-        'price': np.nan,
-        'open': np.nan,
-        'previous_close': np.nan,
-        'change_abs': np.nan,
-        'change_pct': np.nan,
-        'source': 'N/A',
-        'dataframe': None
-    }
+            pass
 
+        # Try info
+        try:
+            ticker = yf.Ticker(sym)
+            info = ticker.info
+            price = None
+            if 'regularMarketPrice' in info:
+                price = float(info['regularMarketPrice'])
+            elif 'currentPrice' in info:
+                price = float(info['currentPrice'])
+            elif 'bid' in info:
+                price = float(info['bid'])
+            elif 'ask' in info:
+                price = float(info['ask'])
+            if price is not None:
+                open_price = float(info.get('regularMarketOpen', float('nan')))
+                prev_close = float(info.get('regularMarketPreviousClose', float('nan')))
+                change_abs = float(info.get('regularMarketChange', float('nan')))
+                change_pct = float(info.get('regularMarketChangePercent', float('nan')))
+                return {
+                    'symbol_used': sym,
+                    'status': 'success',
+                    'price': price,
+                    'open': open_price,
+                    'previous_close': prev_close,
+                    'change_abs': change_abs,
+                    'change_pct': change_pct,
+                    'source': 'info'
+                }
+        except Exception:
+            pass
+
+        # Try download
+        try:
+            dl = yf.download(sym, period='2d', progress=False)
+            if not dl.empty:
+                price = float(dl['Close'].iloc[-1])
+                open_price = float(dl['Open'].iloc[-1])
+                if len(dl) > 1:
+                    prev_close = float(dl['Close'].iloc[-2])
+                else:
+                    prev_close = float('nan')
+                change_abs = price - prev_close
+                change_pct = (change_abs / prev_close * 100) if prev_close == prev_close else float('nan')
+                return {
+                    'symbol_used': sym,
+                    'status': 'success',
+                    'price': price,
+                    'open': open_price,
+                    'previous_close': prev_close,
+                    'change_abs': change_abs,
+                    'change_pct': change_pct,
+                    'source': 'download'
+                }
+        except Exception:
+            pass
+
+    return {
+        'symbol_used': None,
+        'status': 'no data available',
+        'price': float('nan'),
+        'open': float('nan'),
+        'previous_close': float('nan'),
+        'change_abs': float('nan'),
+        'change_pct': float('nan'),
+        'source': None
+    }
 
 def get_auto_data():
     data = {}
-    # WDO
-    wdo_tickers = ['USDBRL=X', 'BRL=X']
-    data['WDO'] = fetch_symbol(wdo_tickers)
-    # DXY
-    dxy_tickers = ['DX-Y.NYB', 'DX=F', 'DXY']
-    data['DXY'] = fetch_symbol(dxy_tickers)
-    # 6L
-    sixl_tickers = ['6L=F']
-    data['6L'] = fetch_symbol(sixl_tickers)
+    data['WDO'] = _get_asset_data(['USDBRL=X', 'BRL=X'])
+    data['DXY'] = _get_asset_data(['DX-Y.NYB', 'DX=F', 'DXY'])
+    data['6L'] = _get_asset_data(['6L=F', 'GBPUSD=X', 'GBP=X'])
     return data
