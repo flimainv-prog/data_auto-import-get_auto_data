@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 st.set_page_config(
-    page_title="Dados Automáticos - WDO, DXY, 6L",
-    page_icon="📊",
-    layout="wide"
+    page_title="Dashboard WDO, DXY e 6L",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 from data_auto import get_auto_data
@@ -13,48 +15,65 @@ from data_auto import get_auto_data
 def load_data():
     return get_auto_data()
 
-st.title("📈 Dados em Tempo Real: WDO, DXY e 6L")
+st.title("📊 Dashboard Monitoramento: WDO, DXY e 6L")
 
-col_btn, col_space = st.columns([1, 4])
-with col_btn:
+# Botão de atualização manual
+col_btn1, col_btn2 = st.columns([4, 1])
+with col_btn2:
     if st.button("🔄 Atualizar Dados", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-data = load_data()
+# Carrega dados
+with st.spinner('Carregando dados financeiros...'):
+    dashboard_data = load_data()
 
-cols = st.columns(3)
-for i, asset in enumerate(['WDO', 'DXY', '6L']):
-    d = data[asset]
-    with cols[i]:
-        if d['status'] == 'available':
-            price_val = d['price']
-            delta_val = d['change_pct'] / 100 if not pd.isna(d['change_pct']) else None
-            st.metric(
-                label=asset,
-                value=price_val,
-                delta=delta_val
-            )
-            st.caption(f"📊 {d['symbol_used']} ({d['source']})")
-        else:
-            st.metric(label=asset, value="N/D", delta=None)
-            st.error(f"❌ {asset}: {d['status']} ({d['symbol_used']})")
+# Cards resumidos
+col1, col2, col3 = st.columns(3)
 
+with col1:
+    st.subheader("🪙 WDO")
+    wdo = dashboard_data['WDO']
+    if wdo['status'] == 'OK':
+        st.metric(
+            label=f"{wdo['symbol_used']}",
+            value=f"{wdo['price']:.4f}",
+            delta=f"{wdo['change_pct']:+.2f}%"
+        )
+        st.caption(f"Var. Abs: {wdo['change_abs']:+.4f} | Abertura: {wdo['open']:.4f}")
+    else:
+        st.warning(wdo['status'])
+
+with col2:
+    st.subheader("💵 DXY")
+    dxy = dashboard_data['DXY']
+    if dxy['status'] == 'OK':
+        st.metric(
+            label=f"{dxy['symbol_used']}",
+            value=f"{dxy['price']:.2f}",
+            delta=f"{dxy['change_pct']:+.2f}%"
+        )
+        st.caption(f"Var. Abs: {dxy['change_abs']:+.2f} | Abertura: {dxy['open']:.2f}")
+    else:
+        st.warning(dxy['status'])
+
+with col3:
+    st.subheader("🇬🇧 6L")
+    sixl = dashboard_data['6L']
+    if sixl['status'] == 'OK':
+        st.metric(
+            label=f"{sixl['symbol_used']}",
+            value=f"{sixl['price']:.4f}",
+            delta=f"{sixl['change_pct']:+.2f}%"
+        )
+        st.caption(f"Var. Abs: {sixl['change_abs']:+.4f} | Abertura: {sixl['open']:.4f}")
+    else:
+        st.warning(sixl['status'])
+
+# Tabela consolidada
 st.subheader("📋 Tabela Consolidada")
-table_data = []
-for asset in ['WDO', 'DXY', '6L']:
-    d = data[asset]
-    table_data.append({
-        'Ativo': asset,
-        'Preço': f"{d['price']:.4f}" if not pd.isna(d['price']) else 'N/D',
-        'Abertura': f"{d['open']:.4f}" if not pd.isna(d['open']) else 'N/D',
-        'Fech. Ant.': f"{d['previous_close']:.4f}" if not pd.isna(d['previous_close']) else 'N/D',
-        'Var. Abs': f"{d['change_abs']:.4f}" if not pd.isna(d['change_abs']) else 'N/D',
-        'Var. %': f"{d['change_pct']:.2f}%" if not pd.isna(d['change_pct']) else 'N/D',
-        'Status': d['status'],
-        'Símbolo': d['symbol_used'],
-        'Fonte': d['source']
-    })
+df_table = pd.DataFrame([dashboard_data['WDO'], dashboard_data['DXY'], dashboard_data['6L']])
+df_display = df_table[['symbol_used', 'status', 'price', 'change_pct', 'source']].round(4)
+st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-df_table = pd.DataFrame(table_data)
-st.dataframe(df_table, use_container_width=True, hide_index=True)
+st.caption("* Dados atualizados a cada 30s automaticamente ou via botão manual. Fonte: Yahoo Finance.")
