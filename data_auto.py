@@ -5,7 +5,7 @@ import numpy as np
 def get_auto_data():
     result = {}
     
-    # WDO
+    # WDO (USDBRL sempre funciona)
     try:
         wdo = yf.download('USDBRL=X', period='2d', progress=False)
         if not wdo.empty:
@@ -43,7 +43,7 @@ def get_auto_data():
     except:
         result['DXY'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
     
-    # 6L (GBP/USD como proxy)
+    # 6L (GBPUSD como proxy)
     try:
         sixl = yf.download('GBPUSD=X', period='2d', progress=False)
         if not sixl.empty:
