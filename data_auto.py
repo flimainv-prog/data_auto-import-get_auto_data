@@ -63,4 +63,3 @@ def get_auto_data():
         result['6L'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
     
     return result
-    
