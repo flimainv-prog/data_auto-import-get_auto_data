@@ -5,7 +5,7 @@ import numpy as np
 def get_auto_data():
     result = {}
     
-    # WDO - USD/BRL spot (ticker real e sempre disponível)
+    # WDO - USD/BRL (ticker sempre disponível)
     try:
         wdo = yf.download('USDBRL=X', period='2d', progress=False)
         if not wdo.empty:
@@ -21,10 +21,10 @@ def get_auto_data():
             }
         else:
             result['WDO'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
-    except:
+    except Exception as e:
         result['WDO'] = {'status': 'erro', 'price': 0, 'change_pct': 0}
     
-    # DXY - ticker oficial
+    # DXY
     try:
         dxy = yf.download('DX=F', period='2d', progress=False)
         if not dxy.empty:
@@ -35,9 +35,4 @@ def get_auto_data():
                 'symbol': 'DX=F',
                 'price': float(latest['Close']),
                 'open': float(latest['Open']),
-                'change_abs': float(latest['Close'] - prev['Close']),
-                'change_pct': float((latest['Close'] - prev['Close']) / prev['Close'] * 100)
-            }
-        else:
-            result['DXY']
-            
+                'change_abs': float(latest['Close']
