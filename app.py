@@ -1,84 +1,54 @@
-import yfinance as yf
+import streamlit as st
 import pandas as pd
-import numpy as np
+from data_auto import get_auto_data
 
 
-def fetch_single_asset(tickers):
-    # Tenta snapshot via info
-    for sym in tickers:
-        try:
-            ticker_obj = yf.Ticker(sym)
-            info = ticker_obj.info
-            price = info.get('regularMarketPrice') or info.get('currentPrice')
-            if price is None:
-                continue
-            open_price = info.get('regularMarketOpen')
-            prev_close = info.get('regularMarketPreviousClose')
-            change_abs = info.get('regularMarketChange')
-            if change_abs is None and prev_close is not None:
-                change_abs = price - prev_close
-            change_pct = info.get('regularMarketChangePercent')
-            if change_pct is None and prev_close is not None and prev_close != 0:
-                change_pct = (change_abs / prev_close) * 100
-            return {
-                'symbol_used': sym,
-                'status': 'OK',
-                'price': float(price),
-                'open': float(open_price) if open_price else np.nan,
-                'previous_close': float(prev_close) if prev_close else np.nan,
-                'change_abs': float(change_abs) if change_abs else np.nan,
-                'change_pct': float(change_pct) if change_pct else np.nan,
-                'source': 'yfinance.info'
-            }
-        except Exception:
-            continue
+st.set_page_config(page_title="Dashboard WDO, DXY e 6L", layout="wide")
 
-    # Fallback para history diário
-    for sym in tickers:
-        try:
-            data = yf.download(sym, period='5d', interval='1d', progress=False, group_by='ticker')
-            if isinstance(data, pd.DataFrame) and not data.empty and len(data) >= 2:
-                data = data['Close'].dropna() if 'Close' in data.columns else data
-                if len(data) >= 2:
-                    last_close = data.iloc[-1]
-                    prev_close = data.iloc[-2]
-                    change_abs = last_close - prev_close
-                    change_pct = (change_abs / prev_close) * 100 if prev_close != 0 else np.nan
-                    # Pega open do último dia
-                    full_data = yf.download(sym, period='2d', interval='1d', progress=False)
-                    open_price = full_data['Open'].iloc[-1] if not full_data.empty else np.nan
-                    return {
-                        'symbol_used': sym,
-                        'status': 'Fallback diário',
-                        'price': float(last_close),
-                        'open': float(open_price),
-                        'previous_close': float(prev_close),
-                        'change_abs': float(change_abs),
-                        'change_pct': float(change_pct),
-                        'source': 'yfinance.history 1d'
-                    }
-        except Exception:
-            continue
+st.title("📊 Dashboard Financeiro: WDO, DXY e 6L")
 
-    return {
-        'symbol_used': None,
-        'status': 'Sem dados disponíveis',
-        'price': np.nan,
-        'open': np.nan,
-        'previous_close': np.nan,
-        'change_abs': np.nan,
-        'change_pct': np.nan,
-        'source': None,
-    }
+@st.cache_data(ttl=30)
+def load_data():
+    return get_auto_data()
 
+data = load_data()
 
-def get_auto_data():
-    assets = {
-        'WDO': ['USDBRL=X', 'BRL=X'],
-        'DXY': ['DX-Y.NYB', 'DX=F', 'DXY'],
-        '6L': ['6L=F', 'GBPUSD=X']
-    }
-    result = {}
-    for asset, tickers in assets.items():
-        result[asset] = fetch_single_asset(tickers)
-    return result
+# Cards métricos
+st.subheader("Resumo dos Ativos")
+col1, col2, col3 = st.columns(3)
+assets = ['WDO', 'DXY', '6L']
+
+for i, asset in enumerate(assets):
+    cols = [col1, col2, col3]
+    with cols[i]:
+        d = data[asset]
+        if d['status'] == 'available':
+            st.metric(
+                label=f"{asset} ({d['symbol_used']})",
+                value=f"{d['price']:.4f}",
+                delta=f"{d['change_pct']:.2f}%"
+            )
+            st.caption(f"Abertura: {d['open']:.4f} | Fech. Ant: {d['previous_close']:.4f}")
+        else:
+            st.warning(f"⚠️ {asset} indisponível no momento.")
+            st.caption("Sem dados recentes disponíveis. Tentando symbols alternativos...")
+
+# Tabela consolidada
+st.subheader("Tabela Consolidada")
+table_data = []
+for asset in assets:
+    d = data[asset]
+    table_data.append({
+        'Ativo': asset,
+        'Símbolo': d['symbol_used'] or 'N/A',
+        'Status': d['status'].upper(),
+        'Preço Atual': d.get('price', 'N/A'),
+        'Variação %': f"{d.get('change_pct', 0):.2f}%" if d.get('change_pct') is not None else 'N/A',
+        'Variação Abs': f"{d.get('change_abs', 0):.4f}" if d.get('change_abs') is not None else 'N/A',
+        'Fonte': d['source']
+    })
+
+df_table = pd.DataFrame(table_data)
+st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+st.caption("* Dados atualizados a cada 30 segundos via cache. Fonte: yfinance.")
