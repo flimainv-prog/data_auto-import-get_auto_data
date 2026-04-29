@@ -1,42 +1,51 @@
-import streamlit as st
 import yfinance as yf
 import pandas as pd
-from typing import Dict
+import numpy as np
 
-@st.cache_data(ttl=30)
-def get_auto_data() -> Dict[str, pd.DataFrame]:
-    data: Dict[str, pd.DataFrame] = {}
+def process_df(df, symbol, source):
+    if df.empty or len(df) < 1:
+        return None
+    price = float(df['Close'].iloc[-1])
+    open_price = float(df['Open'].iloc[-1])
+    previous_close = float(df['Close'].iloc[-2]) if len(df) >= 2 else np.nan
+    change_abs = price - previous_close if not np.isnan(previous_close) else np.nan
+    change_pct = (change_abs / previous_close * 100) if not np.isnan(previous_close) and previous_close != 0 else np.nan
+    return {
+        'symbol_used': symbol,
+        'status': 'success',
+        'price': price,
+        'open': open_price,
+        'previous_close': previous_close,
+        'change_abs': change_abs,
+        'change_pct': change_pct,
+        'source': source
+    }
 
-    def safe_download(tickers: list, periods_intervals: list) -> pd.DataFrame:
-        for ticker in tickers:
-            for period, interval in periods_intervals:
-                try:
-                    df = yf.download(ticker, period=period, interval=interval, progress=False)
-                    if not df.empty:
-                        return df
-                except Exception:
-                    pass
-        return pd.DataFrame()
+def fetch_asset_data(tickers, asset_name):
+    strategies = [('1d', '5m'), ('2d', '1h'), ('5d', '1d')]
+    for ticker in tickers:
+        for period, interval in strategies:
+            try:
+                df = yf.download(ticker, period=period, interval=interval, progress=False, group_by=None)
+                result = process_df(df, ticker, f'{interval}_{period}')
+                if result:
+                    return result
+            except Exception:
+                continue
+    return {
+        'symbol_used': None,
+        'status': f'Dados indisponíveis para {asset_name}. Todos os tickers falharam.',
+        'price': np.nan,
+        'open': np.nan,
+        'previous_close': np.nan,
+        'change_abs': np.nan,
+        'change_pct': np.nan,
+        'source': None
+    }
 
-    # WDO - Mini Dólar Futuro com fallbacks
-    wdo_tickers = ['WDOU24.SA', 'WDOV24.SA', 'WDOZ24.SA', 'USDBRL=X']
-    wdo_configs = [('2d', '5m'), ('5d', '15m')]
-    wdo_df = safe_download(wdo_tickers, wdo_configs)
-    data['WDO'] = wdo_df.tail(1) if not wdo_df.empty else pd.DataFrame()
-
-    # DXY - US Dollar Index com fallbacks
-    dxy_tickers = ['DX-Y.NYB', 'DX=F']
-    dxy_configs = [('2d', '5m'), ('5d', '15m')]
-    dxy_df = safe_download(dxy_tickers, dxy_configs)
-    data['DXY'] = dxy_df.tail(1) if not dxy_df.empty else pd.DataFrame()
-
-    # 6L com fallbacks (ajuste tickers se necessário)
-    sixl_tickers = ['6L=F', 'SI=F']  # Exemplos; ajuste conforme necessário
-    sixl_configs = [('1d', '1m'), ('2d', '5m')]
-    sixl_df = safe_download(sixl_tickers, sixl_configs)
-    if not sixl_df.empty:
-        data['6L'] = sixl_df.tail(1)
-    else:
-        data['6L_status'] = 'Indisponível - sem dados nos tickers/intervalos testados'
-
+def get_auto_data():
+    data = {}
+    data['WDO'] = fetch_asset_data(['USDBRL=X', 'BRL=X'], 'WDO')
+    data['DXY'] = fetch_asset_data(['DX-Y.NYB', 'DX=F', 'DXY'], 'DXY')
+    data['6L'] = fetch_asset_data(['6L=F', 'GBPUSD=X'], '6L')
     return data
